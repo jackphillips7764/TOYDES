@@ -148,61 +148,14 @@ void decrypt(unsigned char * source, unsigned char * dest, int size, unsigned ch
 	}
 
 }
-void send_file(unsigned int key, unsigned char k1, unsigned char k2, int port, char * ip,
-		char * file){
-	//Let set up some network crap
-	int sock = 0;
-	struct sockaddr_in addr;
-	//create socket
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-	if(sock <= 0){
-		perror("socket Failed\n");
-		return;
-	}
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(port);
-
-	if(inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr)<=0){
-        printf("\nInvalid address/ Address not supported \n");
-        return;
-    }
-	if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0){
-        printf("\nConnection Failed \n");
-        return;
-    }
-
-	//open file to send
-	int fd = open(file, O_RDONLY);
-	if(fd < -1){
-		return;
-	}
-	struct stat fileStat;
-	if(fstat(fd,&fileStat) < 0)
-        return;
-
-	//calloc buffer
-	unsigned char * conntent = malloc(fileStat.st_size);
-	read(fd, conntent, fileStat.st_size);
-
-	unsigned char * encrypted = malloc(fileStat.st_size);
-	encrypt(conntent, encrypted, fileStat.st_size, k1, k2);
-
-	write(sock, encrypted, fileStat.st_size);
-	printf("file SENT\n");
-	close(sock);
-	close(fd);
-}
-
 
 int main(int argc, char ** argv){
 	unsigned char p10[10] = {2,4,1,6,3,9,0,8,7,5};
 	unsigned char p8[8] = {5,2,6,3,7,4,9,8};
 	/* CREATE KEYS */
 	//key operations
-	if (argc < 5) {
-		printf("Use %s <key> <ip> <port> <filen>\n", argv[0]);
+	if (argc < 2) {
+		printf("Use %s <key>\n", argv[0]);
 		return 1;
 	}
 	unsigned int key = atoi(argv[0]);
@@ -232,28 +185,50 @@ int main(int argc, char ** argv){
 	unsigned int k2 = 0;
 	permutation(&k2, (p5_right << 5) + p5_left, p8, 8);
 
-	//encrypt a test message
-	//test message
-	char * message = "Look at this super secret message 123129810398204!";
-	unsigned int length = strlen(message) + 1;
-	unsigned char * encrpt_message = malloc(length + 1);
-	unsigned char * decrpt_message = malloc(length + 1);
+	//okay recv a file
+	int sock = 0;
+	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+    {
+        perror("socket failed");
+        return EXIT_FAILURE;
+    }
+    int opt = 1;
 
-	encrypt(message, encrpt_message, length, k1, k2);
-	for (int i = 0; i < length; i ++){
-		printf("%x", encrpt_message[i]);
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
+                                                  &opt, sizeof(opt)))
+    {
+        perror("setsockopt");
+        return EXIT_FAILURE;
+    }
+	struct sockaddr_in addr;
+	addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons( 1234 );
+
+	if (bind(sock, (struct sockaddr *)&addr,sizeof(addr))<0)
+    {
+        perror("bind failed");
+        return EXIT_FAILURE;
+    }
+	if (listen(sock, 3) < 0)
+    {
+        perror("listen");
+        return EXIT_FAILURE;
+    }
+	int addrlen = sizeof(addr);
+	int new = accept(sock, (struct sockaddr *)&addr,(socklen_t*)&addrlen);
+
+	//open file
+	int fd = open("./test_file", O_WRONLY);
+	int fd_e = open("./test_file_e", O_WRONLY);
+	unsigned char * buf[0x100];
+	unsigned char * real[0x100];
+	int r = 0;
+	while((r = read(new, buf, 0x100)) > 0){
+		decrypt(buf, real, r, k1, k2);
+		write(fd, real, r);
+		write(fd_e, buf, r);
 	}
-	printf("\n");
-
-	//decreypt it and print out showing it's the same
-	decrypt(encrpt_message,decrpt_message, length, k1, k2);
-	for (int i = 0; i < length; i ++){
-		printf("%c", decrpt_message[i]);
-	}
-	printf("\n");
-	printf("now we are gonna send message to other place with encrypted filei\nEncrypt the binary\n");
-
-	send_file(key, k1, k2, atoi(argv[3]), argv[2], argv[4]);
-
-	return 0;
+	close(fd);
+	close(sock);
 }
