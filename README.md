@@ -22,3 +22,11 @@ encryption is that we are doing 8 bit values. This means each char is replaced w
 similar to a substitution cipher. We need to use larger blocks to make it more secure. That is why normal encryption
 uses 16 byte key or even bigger.
 
+
+Examlple running it:
+
+`./reciver 123`
+
+`./des 123 127.0.0.1 1234 des.c`
+
+Then the file test_file should be the same as des.c after being sent as encrypted file
